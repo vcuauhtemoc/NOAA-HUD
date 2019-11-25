@@ -6,6 +6,6 @@ Important variables:
     
     humidity_data: list containing humidity forecast data 
     
-    humidity_datapoint: tuple list (timestamp, humidity) with concatenated historical weather and forecast weather. Passed to humidity_df to be a plot-able dataframe.
+    datapoint_tuples: tuple list (timestamp, humidity) with concatenated historical weather and forecast weather. Passed to humidity_df to be a plot-able dataframe.
     
     humidity_df: The dataframe used in graphing. contains humidity_datapoint for data. 
