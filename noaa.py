@@ -1,7 +1,8 @@
 #
-#	Takes JSON from NWS API and generates a graph of humidity data for a chosen weather station.
-#	Next objective is to have a 6 day weather report, but starting 3 days in the past, so the current moment
-# 	sits in the middle of the graph.
+#	Takes JSON from NWS API and generates a graph of humidity data for a chosen weather station,
+#   3 days past to 3 days in the future. Next objective is to join all datapoints, past and forecast,
+#	into a combined table where each element is callable. Will either need to use OOP
+#   or different functions to make this tidy.
 #
 
 from datetime import datetime as dt
@@ -27,7 +28,8 @@ while True:
         wsdl = Client('https://graphical.weather.gov/xml/DWMLgen/wsdl/ndfdXML.wsdl')
         coordinates = wsdl.service.LatLonListZipCode(zip_code)
     except:
-        print('Zip code please, not how much your mom weighs.')
+        print('Zip code please, not how much your mom weighs. Or, if you did give a zip code, my bad. Probably '
+              'a server error on NWS\'s side.')
     else:
         break
 
@@ -40,11 +42,15 @@ lon = lat_lon_zip[lat_lon_zip.index(',') + 1:]
 ## Retrieving forecast data nearest to zipcode
 
 # NWS JSON containing link to weather station's raw data
-nws_api = url_request.urlopen('https://api.weather.gov/points/' + lat_lon_zip).read()
-nws_api_data = json.loads(nws_api)
+with url_request.urlopen('https://api.weather.gov/points/' + lat_lon_zip) as nws_api:
+    nws_api_data = json.loads(nws_api.read())
 
 # get raw data for corresponding weather station
-forecast = url_request.urlopen(nws_api_data['properties']['forecastGridData']).read()
+with url_request.urlopen(nws_api_data['properties']['forecastGridData']) as forecast_grid_data:
+    forecast = forecast_grid_data.read()
+
+
+
 forecast_data = json.loads(forecast)
 humidity_data = forecast_data['properties']['relativeHumidity']['values']
 locale = nws_api_data['properties']['relativeLocation']['properties']['city'] + ", " + \
@@ -96,7 +102,7 @@ payload = payload[:-1]
 
 # consolidating 3-layer table header down to one layer
 for e in tr_elements[4]:
-    if tr_elements[4].index(e) == 6:  # 'Temp' ubcolumns
+    if tr_elements[4].index(e) == 6:  # 'Temp' subcolumns
         for i, ee in enumerate(tr_elements[5][:3]):
             if i == 2:  # subcolumns Min/max
                 for eee in tr_elements[6]:
@@ -145,18 +151,20 @@ for i in range(len(date_number)):
 # Swapping out the 'date' and 'time' columns for 'Timestamp'
 historical_weather_df.insert(loc=0, column='Timestamp', value=timestamp_list)
 historical_weather_df = historical_weather_df.drop(columns=['Date', time_column_label])
+historical_weather_df.to_csv('historical_csv.csv')
 rel_humidity_array = []
 
 # Strip the '%' from data, convert dtype to int.
 for e in historical_weather_df['RelativeHumidity']:
     rel_humidity_array.append(int(e[:-1]))
 
-
 #historical_weather_df.to_csv('historical_weather_' + station_id + '.csv')
 
 datapoint_tuples = []
 dt_now_hr = dt.now().replace(minute=0, second=0, microsecond=0)  # dt object current time, truncating to current hr.
 historical_weather_timestamp = historical_weather_df['Timestamp']
+
+# adding historical data to list tuple
 for i in range(len(historical_weather_timestamp)):
     dt_timestamp = dt.fromisoformat(historical_weather_timestamp[i])
     humidity = rel_humidity_array[i]
@@ -174,8 +182,8 @@ for e in humidity_data:
 
 humidity_df = pd.DataFrame(data=datapoint_tuples, columns=['Date', 'Humidity (%)'])
 humidity_df['Humidity (%)'] = ss.savgol_filter(humidity_df['Humidity (%)'],9,1)
+# humidity_df_filtered = ss.savgol_filter(humidity_df['Humidity (%)'],9,1)
 plot = humidity_df.plot(x='Date',y='Humidity (%)', kind='line', grid='true', title=locale)
-
 
 plot.tick_params(axis='x', which='minor', labelsize=8)
 plot.tick_params(axis='x', which='major', pad=16, labelrotation=0)
@@ -183,4 +191,5 @@ plot.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
 plot.xaxis.set_minor_locator(mdates.HourLocator(interval=6))
 plot.xaxis.set_minor_formatter(mdates.DateFormatter("%I%p"))
 plt.setp(plot.xaxis.get_majorticklabels(), ha="center")
+# plt.plot(humidity_df['Date'],humidity_df_filtered)
 plt.show()
