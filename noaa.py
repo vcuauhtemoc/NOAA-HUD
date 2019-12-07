@@ -199,17 +199,17 @@ def historical_weather():
     for col_name, col_data in historical_weather_df.iteritems():
         if any(col_equivalent in col_name for col_equivalent in convert_col_names):
             historical_weather_df = historical_weather_df.astype({col_name: 'float64'})
-
+    historical_weather_df.to_csv('Vrbl.csv')
     # translate syntax of historical weather wind info to match forecast wind info, drop column with old format.
     for index, row in historical_weather_df.iterrows():
         wind_mph = str(row['Wind(mph)'])
         if wind_mph is not None:
             if 'G' in wind_mph:
                 wind_mph = wind_mph[:wind_mph.index('G')]
-            if 'Calm' not in wind_mph:
+            if ('Calm' or 'Vrbl') not in wind_mph:
                 historical_weather_df.at[index, 'windDirection'] = cardinal_bearings[wind_mph[:wind_mph.index(' ')]]
                 historical_weather_df.at[index, 'windSpeed'] = wind_mph[wind_mph.index(' '):]
-            elif 'Calm' in wind_mph:
+            elif ('Calm' or 'Vrbl') in wind_mph:
                 historical_weather_df.at[index, 'windSpeed'] = 0
     historical_weather_df.drop(['Wind(mph)'], axis=1, inplace=True)
     return historical_weather_df
@@ -252,7 +252,7 @@ big_df = big_df.interpolate()
 
 while True:
     try:
-        print('Please enter just one weather aspect you would like to graph from the list below:')
+        print('Choose what you would like to include in your weather graph:')
         for e in weather_properties:
             print(weather_properties.index(e), e)
         # make attribute a list instead of int, then iterate through each element in list to create multiple data lines.
