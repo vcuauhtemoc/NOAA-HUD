@@ -1,11 +1,22 @@
 # NOAA-HUD
 
-Important variables:
+Weather display intended to run on an e-ink display, with a focus on aesthetic. What I believe to be unique about this app, is that rather than simply display a forecast, the display gives you 3-day historical weather, 3-day forecast, with the current time centered on the graph. It will also display current conditions outside of the graph. 
 
-    historical_weather_df: holds the historical weather information, ordered from oldest to newest datapoint.
-    
-    humidity_data: list containing humidity forecast data 
-    
-    datapoint_tuples: tuple list (timestamp, humidity) with concatenated historical weather and forecast weather. Passed to humidity_df to be a plot-able dataframe.
-    
-    humidity_df: The dataframe used in graphing. contains humidity_datapoint for data. 
+## Current status:
+
+User can input a zip code only, to retrieve their closest weather station. This also grabs a city/state location from the weather station. You might get a different city name than corresponds to the zip code, because the chosen weather station may be in close proximity, but in a different city. 
+
+Once the user inputs a valid zip code, the program then retrieves forecast data and historical weather data from the National Weather Service, and again prompts the user, this time asking which weather parameters the user wants displayed on the graph. Any time indexes missing datapoints are dealt with using the DataFrame interpolate() method, which is a linear interpolation. 
+
+## Next steps:
+
+### Refining the display:
+
+    - use savgol filter to smooth out data
+    - add a line to delineate the historical weather area and the forecast
+    - consider using CSS to beautify display.
+
+### Adding a current conditions section
+
+    - use an icon pack for weather conditions
+    - more to come :)

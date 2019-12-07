@@ -17,7 +17,7 @@ import urllib.request as url_request
 import xml.etree.ElementTree as ET
 from zeep import Client
 
-#These all should end up being float values.
+# These all should end up being float values.
 weather_properties = [
     'temperature',
     'dewpoint',
@@ -52,7 +52,7 @@ convert_col_names = {
     'WindChill(°F)': 'windChill',
     'HeatIndex(°F)': 'heatIndex',
     'Precipitation (in.) 1 hr': 'quantitativePrecipitation',
-    'Pressure altimeter(in)' : 'pressure'
+    'Pressure altimeter(in)': 'pressure'
 }
 cardinal_bearings = {
     'N': 0,
@@ -101,6 +101,7 @@ def forecast():
     forecast_df = forecast_df.sort_index()
     forecast_df.index = pd.to_datetime(forecast_df.index)
     return forecast_df
+
 
 # Scraping HTML table and returning dataframe.
 def historical_weather():
@@ -243,7 +244,7 @@ t2 = time.time()
 
 for weather_property, property_value in big_df.iteritems():
     if weather_property in weather_properties:
-        big_df[weather_property].replace(['','NA'], np.nan, inplace=True)
+        big_df[weather_property].replace(['', 'NA'], np.nan, inplace=True)
         # big_df = big_df.dropna(subset=[weather_property])
         big_df = big_df.astype({weather_property: 'float64'})
 
@@ -257,7 +258,7 @@ while True:
         # make attribute a list instead of int, then iterate through each element in list to create multiple data lines.
         attributes = input()
         if ' ' or ',' in attributes:
-            attribute_list = re.split('\W+',attributes)
+            attribute_list = re.split('\W+', attributes)
         attribute_list_translated = []
         for attribute_element in attribute_list:
             if re.search(r'[0-9]', attribute_element):
