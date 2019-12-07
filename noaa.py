@@ -199,7 +199,6 @@ def historical_weather():
     for col_name, col_data in historical_weather_df.iteritems():
         if any(col_equivalent in col_name for col_equivalent in convert_col_names):
             historical_weather_df = historical_weather_df.astype({col_name: 'float64'})
-    historical_weather_df.to_csv('Vrbl.csv')
     # translate syntax of historical weather wind info to match forecast wind info, drop column with old format.
     for index, row in historical_weather_df.iterrows():
         wind_mph = str(row['Wind(mph)'])
