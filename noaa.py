@@ -1,6 +1,6 @@
-from collections import defaultdict
 from datetime import datetime as dt
 from datetime import date
+import time
 from datetime import timedelta
 import dateutil.relativedelta as rd
 from geopy import distance
@@ -10,12 +10,14 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
+import re
 import requests
 import scipy.signal as ss
 import urllib.request as url_request
 import xml.etree.ElementTree as ET
 from zeep import Client
 
+#These all should end up being float values.
 weather_properties = [
     'temperature',
     'dewpoint',
@@ -49,14 +51,23 @@ convert_col_names = {
     'RelativeHumidity': 'relativeHumidity',
     'WindChill(°F)': 'windChill',
     'HeatIndex(°F)': 'heatIndex',
-    'Precipitation (in.) 1 hr': 'quantitativePrecipitation'
+    'Precipitation (in.) 1 hr': 'quantitativePrecipitation',
+    'Pressure altimeter(in)' : 'pressure'
+}
+cardinal_bearings = {
+    'N': 0,
+    'NE': 45,
+    'E': 90,
+    'SE': 135,
+    'S': 180,
+    'SW': 225,
+    'W': 270,
+    'NW': 315
 }
 
 
-# Going to use this to grab all data variables, need to concatenate with historical data.
+# gets forecast JSON and returns dataframe.
 def forecast():
-
-
     # get raw data for corresponding weather station
     with url_request.urlopen(nws_api_data['properties']['forecastGridData']) as forecast_grid_data:
         forecast = forecast_grid_data.read()
@@ -71,14 +82,18 @@ def forecast():
             if any(temp_property in property for temp_property in temperature_properties):
                 for element in forecast_data['properties'][property]['values']:
                     truncated_timestamp = element['validTime'][:element['validTime'].index('+')]
-                    if truncated_timestamp not in timestamp and element['value'] is not None:
+                    if dt.fromisoformat(truncated_timestamp) - dt.now() > timedelta(days=3):
+                        continue
+                    elif truncated_timestamp not in timestamp and element['value'] is not None:
                         timestamp[truncated_timestamp] = {property: (element['value'] * (9 / 5)) + 32}
                     elif element['value'] is not None:
                         timestamp[truncated_timestamp][property] = (element['value'] * (9 / 5)) + 32
             else:
                 for element in forecast_data['properties'][property]['values']:
                     truncated_timestamp = element['validTime'][:element['validTime'].index('+')]
-                    if truncated_timestamp not in timestamp:
+                    if dt.fromisoformat(truncated_timestamp) - dt.now() > timedelta(days=3):
+                        continue
+                    elif truncated_timestamp not in timestamp:
                         timestamp[truncated_timestamp] = {property: element['value']}
                     else:
                         timestamp[truncated_timestamp][property] = element['value']
@@ -87,10 +102,8 @@ def forecast():
     forecast_df.index = pd.to_datetime(forecast_df.index)
     return forecast_df
 
-
+# Scraping HTML table and returning dataframe.
 def historical_weather():
-    """Should return a dataframe of all historical weather variables, with a datetime index."""
-
     # Need to first retrieve list of all US weather stations
     noaa_ws_xml = url_request.urlopen('https://w1.weather.gov/xml/current_obs/index.xml').read()
     noaa_ws_xml_tree = ET.fromstring(noaa_ws_xml)
@@ -187,6 +200,18 @@ def historical_weather():
         if any(col_equivalent in col_name for col_equivalent in convert_col_names):
             historical_weather_df = historical_weather_df.astype({col_name: 'float64'})
 
+    # translate syntax of historical weather wind info to match forecast wind info, drop column with old format.
+    for index, row in historical_weather_df.iterrows():
+        wind_mph = str(row['Wind(mph)'])
+        if wind_mph is not None:
+            if 'G' in wind_mph:
+                wind_mph = wind_mph[:wind_mph.index('G')]
+            if 'Calm' not in wind_mph:
+                historical_weather_df.at[index, 'windDirection'] = cardinal_bearings[wind_mph[:wind_mph.index(' ')]]
+                historical_weather_df.at[index, 'windSpeed'] = wind_mph[wind_mph.index(' '):]
+            elif 'Calm' in wind_mph:
+                historical_weather_df.at[index, 'windSpeed'] = 0
+    historical_weather_df.drop(['Wind(mph)'], axis=1, inplace=True)
     return historical_weather_df
 
 
@@ -207,28 +232,43 @@ lat_lon_zip = parsed_coordinates.find('latLonList').text
 lat = lat_lon_zip[:lat_lon_zip.index(',')]
 lon = lat_lon_zip[lat_lon_zip.index(',') + 1:]
 
-## Retrieving forecast data nearest to zipcode
+## Retrieve a coordinate pair and city name
 with url_request.urlopen('https://api.weather.gov/points/' + lat_lon_zip) as nws_api:
     nws_api_data = json.loads(nws_api.read())
 locale = nws_api_data['properties']['relativeLocation']['properties']['city'] + ", " + \
          nws_api_data['properties']['relativeLocation']['properties']['state']
-# NWS JSON containing link to weather station's raw data
-
-
+t1 = time.time()
 big_df = pd.concat([historical_weather(), forecast()])
-big_df.to_csv('check_result.csv')
+t2 = time.time()
+# big_df.to_csv('why_extra_dates.csv')
+
+for weather_property, property_value in big_df.iteritems():
+    if weather_property in weather_properties:
+        big_df[weather_property].replace(['','NA'], np.nan, inplace=True)
+        # big_df = big_df.dropna(subset=[weather_property])
+        big_df = big_df.astype({weather_property: 'float64'})
+
+big_df = big_df.interpolate()
+
 while True:
     try:
         print('Please enter just one weather aspect you would like to graph from the list below:')
         for e in weather_properties:
-            print(weather_properties.index(e),e)
-        attribute = weather_properties[int(input())]
-        big_df[attribute].replace('', np.nan, inplace=True)
-        big_df = big_df.dropna(subset=[attribute])
-        big_df = big_df.astype({attribute: 'float64'})
-        # big_df_filtered = ss.savgol_filter(big_df[attribute],9,1)
+            print(weather_properties.index(e), e)
+        # make attribute a list instead of int, then iterate through each element in list to create multiple data lines.
+        attributes = input()
+        if ' ' or ',' in attributes:
+            attribute_list = re.split('\W+',attributes)
+        attribute_list_translated = []
+        for attribute_element in attribute_list:
+            if re.search(r'[0-9]', attribute_element):
+                attribute_list_translated.append(weather_properties[int(attribute_element)])
+            else:
+                attribute_list_translated.append(attribute_element)
+        # for e in attribute_list_translated:
+        #     big_df = ss.savgol_filter(big_df[attribute_list_translated],9,1)
 
-        plot = big_df.plot(y=attribute, kind='line',title=locale)
+        plot = big_df.plot(y=attribute_list_translated, kind='line', title=locale)
         plot.tick_params(axis='x', which='minor', labelsize=8)
         plot.tick_params(axis='x', which='major', pad=16, labelrotation=0)
         plot.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
@@ -241,7 +281,3 @@ while True:
         print(ex)
     else:
         break
-
-    # if any(equivalent_name in col for equivalent_name in convert_col_names)
-# forecast_df.plot()
-# plt.show()
