@@ -204,13 +204,14 @@ def historical_weather():
     for index, row in historical_weather_df.iterrows():
         wind_mph = str(row['Wind(mph)'])
         if wind_mph is not None:
-            if 'G' in wind_mph:
-                wind_mph = wind_mph[:wind_mph.index('G')]
-            if ('Calm' or 'Vrbl') not in wind_mph:
-                historical_weather_df.at[index, 'windDirection'] = cardinal_bearings[wind_mph[:wind_mph.index(' ')]]
-                historical_weather_df.at[index, 'windSpeed'] = wind_mph[wind_mph.index(' '):]
-            elif ('Calm' or 'Vrbl') in wind_mph:
-                historical_weather_df.at[index, 'windSpeed'] = 0
+            wind_direction = re.match(r'[NESW]+', wind_mph)
+            wind_speed = re.search(r'[0-9]+', wind_mph)
+            if wind_direction:
+                historical_weather_df.at[index, 'windDirection'] = cardinal_bearings[wind_direction[0]]
+            if wind_speed:
+                historical_weather_df.at[index, 'windSpeed'] = wind_speed[0]
+            else:
+                historical_weather_df.at[index, 'windSpeed'] = None
     historical_weather_df.drop(['Wind(mph)'], axis=1, inplace=True)
     return historical_weather_df
 
@@ -238,9 +239,9 @@ with url_request.urlopen('https://api.weather.gov/points/' + lat_lon_zip) as nws
 locale = nws_api_data['properties']['relativeLocation']['properties']['city'] + ", " + \
          nws_api_data['properties']['relativeLocation']['properties']['state']
 t1 = time.time()
-big_df = pd.concat([historical_weather(), forecast()])
+big_df = pd.concat([historical_weather(), forecast()], sort=True)
 t2 = time.time()
-# big_df.to_csv('why_extra_dates.csv')
+big_df.to_csv('check_wind_columns.csv')
 
 for weather_property, property_value in big_df.iteritems():
     if weather_property in weather_properties:
@@ -252,7 +253,7 @@ big_df = big_df.interpolate()
 
 while True:
     try:
-        print('Choose what you would like to include in your weather graph:')
+        print('Choose any combination of weather attributes:')
         for e in weather_properties:
             print(weather_properties.index(e), e)
         # make attribute a list instead of int, then iterate through each element in list to create multiple data lines.
@@ -266,15 +267,16 @@ while True:
             else:
                 attribute_list_translated.append(attribute_element)
         # for e in attribute_list_translated:
-        #     big_df = ss.savgol_filter(big_df[attribute_list_translated],9,1)
+        #     big_df[e] = ss.savgol_filter(big_df[e],9,1)
 
-        plot = big_df.plot(y=attribute_list_translated, kind='line', title=locale)
+        plot = big_df.plot(y=attribute_list_translated, grid='true', kind='line', title=locale)
         plot.tick_params(axis='x', which='minor', labelsize=8)
         plot.tick_params(axis='x', which='major', pad=16, labelrotation=0)
         plot.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
         plot.xaxis.set_minor_locator(mdates.HourLocator(interval=6))
         plot.xaxis.set_minor_formatter(mdates.DateFormatter("%I%p"))
         plt.setp(plot.xaxis.get_majorticklabels(), ha="center")
+        plt.axvline(x=dt.now(), color='black')
         plt.show()
     except Exception as ex:
         print('ERROR. TRY AGAIN')
