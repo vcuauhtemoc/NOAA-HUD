@@ -273,7 +273,7 @@ locale = nws_api_data['properties']['relativeLocation']['properties']['city'] + 
 t1 = time.time()
 big_df = pd.concat([historical_weather(), forecast()], sort=True)
 t2 = time.time()
-big_df.to_csv('check_wind_columns.csv')
+
 
 for weather_property, property_value in big_df.iteritems():
     if weather_property in weather_properties:
@@ -281,8 +281,9 @@ for weather_property, property_value in big_df.iteritems():
         #big_df = big_df.dropna(subset=[weather_property])
         big_df = big_df.astype({weather_property: 'float64'})
 
-big_df = big_df.interpolate()
-
+# easy way to deal with any zero values on a given weather property.
+big_df = big_df.interpolate(method='time')
+big_df.to_csv('check_wind_columns.csv')
 while True:
     try:
         print('Choose any combination of weather attributes:')
@@ -311,8 +312,8 @@ while True:
             else:
                 column = user_input_to_df_columns[attribute_element]
                 attribute_list_translated.append(attribute_element)
-        for e in attribute_list_translated:
-            big_df[e] = ss.savgol_filter(big_df[e],9,1)
+        # for e in attribute_list_translated:
+        #     big_df[e] = ss.savgol_filter(big_df[e],9,1)
 
         #plot = big_df.plot(y=attribute_list_translated, grid='true', kind='line', title=locale)
         fig , ax = plt.subplots()
@@ -349,10 +350,10 @@ while True:
             # plot scatter w/ rotated markers on top of line, pyplot plot function not supporting transformed
             # MarkerStyle, for some reason. Tries to interpret as 'Path'.
             for e in big_df.index:
-                if big_df['windDirection'][e] is not None:
-                    t = mpl.markers.MarkerStyle(marker=r'$\Uparrow$')
-                    t._transform.rotate_deg(big_df['windDirection'][e])
-                    plt.scatter(e,big_df['windSpeed'][e],marker=t,s=200,c='blue')
+                print(e,big_df['windDirection'][e],big_df['windSpeed'][e])
+                t = mpl.markers.MarkerStyle(marker=r'$\uparrow$')
+                t._transform.rotate_deg(360 - int(round(big_df['windDirection'][e])))
+                plt.scatter(e,big_df['windSpeed'][e],marker=t,s=200,c='blue')
             plt.plot(big_df['windSpeed'])
             plt.xlim(dt.now() - timedelta(days=3) , dt.now() + timedelta(days=3))
             pass
@@ -379,6 +380,7 @@ while True:
         ax.set_title(locale)
         plt.setp(ax.xaxis.get_majorticklabels(), ha="center")
         plt.axvline(x=dt.now(), color='black')      #shows current time on graph
+        plt.gray()
         plt.show()
     except Exception as ex:
         print('ERROR. TRY AGAIN')
