@@ -300,7 +300,6 @@ while True:
             if re.search(r'[0-9]', attribute_element):
                 attributes_legend.append(weather_properties_user_inputs[attribute_element])
                 column = user_input_to_df_columns[weather_properties_user_inputs[attribute_element]]
-                print(column)
                 if isinstance(column,str) is False:
                     attribute_list_translated.extend(column)
                 else:
@@ -350,7 +349,6 @@ while True:
             # plot scatter w/ rotated markers on top of line, pyplot plot function not supporting transformed
             # MarkerStyle, for some reason. Tries to interpret as 'Path'.
             for e in big_df.index:
-                print(e,big_df['windDirection'][e],big_df['windSpeed'][e])
                 t = mpl.markers.MarkerStyle(marker=r'$\uparrow$')
                 t._transform.rotate_deg(360 - int(round(big_df['windDirection'][e])))
                 plt.scatter(e,big_df['windSpeed'][e],marker=t,s=200,c='blue')
