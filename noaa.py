@@ -281,6 +281,23 @@ for weather_property, property_value in big_df.iteritems():
         #big_df = big_df.dropna(subset=[weather_property])
         big_df = big_df.astype({weather_property: 'float64'})
 
+index_list = []
+indexes_to_drop = []
+for df_row in big_df.index:
+    index_list.append(df_row)
+def drop_anachronistic_rows(l):
+    # A bit of overlap between historical weather data and forecast, this removes overlapping values.
+    for index,row in enumerate(l):
+        if index != 0:
+            if row < index_list[index - 1]:
+                print(row,index_list[index - 1])
+                indexes_to_drop.append(row)
+                l.pop(index)
+                drop_anachronistic_rows(l)
+
+drop_anachronistic_rows(index_list)
+big_df = big_df.drop(indexes_to_drop)
+
 # easy way to deal with any zero values on a given weather property.
 big_df = big_df.interpolate(method='time')
 big_df.to_csv('check_wind_columns.csv')
@@ -347,7 +364,7 @@ while True:
             pass
         if 'windDirection' and 'windSpeed' in attribute_list_translated:
             # plot scatter w/ rotated markers on top of line, pyplot plot function not supporting transformed
-            # MarkerStyle, for some reason. Tries to interpret as 'Path'.
+            # MarkerStyle, Tries to interpret as 'Path'. Also, setting marker angle is counterclockwise...
             for e in big_df.index:
                 t = mpl.markers.MarkerStyle(marker=r'$\uparrow$')
                 t._transform.rotate_deg(360 - int(round(big_df['windDirection'][e])))
@@ -378,7 +395,6 @@ while True:
         ax.set_title(locale)
         plt.setp(ax.xaxis.get_majorticklabels(), ha="center")
         plt.axvline(x=dt.now(), color='black')      #shows current time on graph
-        plt.gray()
         plt.show()
     except Exception as ex:
         print('ERROR. TRY AGAIN')
