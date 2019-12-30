@@ -11,12 +11,16 @@ import matplotlib.dates as mdates
 import matplotlib as mpl
 import numpy as np
 import pandas as pd
+from pandas.plotting import register_matplotlib_converters
+#from PyQt5 import Qapplication, Qlabel
 import re
 import requests
 import scipy.signal as ss
 import urllib.request as url_request
 import xml.etree.ElementTree as ET
 from zeep import Client
+
+register_matplotlib_converters()
 
 weather_properties = [
     'temperature',
@@ -71,14 +75,12 @@ weather_properties_user_inputs = {
     '3': 'High Temperature',
     '4': 'Low Temperature',
     '5': 'Relative Humidity',
-    '6': 'Apparent Temperature',
-    '7': 'Heat Index',
-    '8': 'Wind Chill',
-    '9': 'Sky Cover',
-    '10': 'Wind Conditions',
-    '11': 'Chance of Rain',
-    '12': 'Rainfall',
-    '13': 'Atmospheric Pressure',
+    '6': 'Wind Chill',
+    '7': 'Sky Cover',
+    '8': 'Wind Conditions',
+    '9': 'Chance of Rain',
+    '10': 'Rainfall',
+    '11': 'Atmospheric Pressure',
 }
 
 user_input_to_df_columns = {
@@ -87,8 +89,6 @@ user_input_to_df_columns = {
     'High Temperature': 'maxTemperature',
     'Low Temperature': 'minTemperature',
     'Relative Humidity': 'relativeHumidity',
-    'Apparent Temperature': 'apparentTemperature' ,
-    'Heat Index': 'heatIndex' ,
     'Wind Chill': 'windChill' ,
     'Sky Cover': 'skyCover',
     'Wind Conditions': ('windDirection','windSpeed'),
@@ -252,10 +252,11 @@ def historical_weather():
 while True:
     try:
         zip_code = input('Enter zip code: \n')
+        print('Finding weather station nearest to ' + zip_code + '...')
         wsdl = Client('https://graphical.weather.gov/xml/DWMLgen/wsdl/ndfdXML.wsdl')
         coordinates = wsdl.service.LatLonListZipCode(zip_code)
     except:
-        print('ERROR. TRY AGAIN')
+        print('Something went wrong, try again.')
     else:
         break
 
@@ -270,6 +271,7 @@ with url_request.urlopen('https://api.weather.gov/points/' + lat_lon_zip) as nws
     nws_api_data = json.loads(nws_api.read())
 locale = nws_api_data['properties']['relativeLocation']['properties']['city'] + ", " + \
          nws_api_data['properties']['relativeLocation']['properties']['state']
+print('Retrieving weather data for nearest NWS weather station, located in ' + locale)
 t1 = time.time()
 big_df = pd.concat([historical_weather(), forecast()], sort=True)
 t2 = time.time()
@@ -290,7 +292,6 @@ def drop_anachronistic_rows(l):
     for index,row in enumerate(l):
         if index != 0:
             if row < index_list[index - 1]:
-                print(row,index_list[index - 1])
                 indexes_to_drop.append(row)
                 l.pop(index)
                 drop_anachronistic_rows(l)
@@ -298,12 +299,19 @@ def drop_anachronistic_rows(l):
 drop_anachronistic_rows(index_list)
 big_df = big_df.drop(indexes_to_drop)
 
+# Deals with zero values at beginning of df, which interpolate doesn't manage.
+for e in big_df.columns:
+    if isinstance(big_df.loc[big_df.index[0],e],np.float64):
+        if np.isnan(big_df.loc[big_df.index[0],e]):
+            big_df.loc[big_df.index[0],e] = big_df.loc[big_df.index[1],e]
+
 # easy way to deal with any zero values on a given weather property.
+big_df = big_df.drop(columns=['apparentTemperature','Precipitation (in.) 3 hr','Precipitation (in.) 6 hr','Pressure sea level(mb)','Sky Cond.','Vis.(mi.)','heatIndex'])
 big_df = big_df.interpolate(method='time')
 big_df.to_csv('check_wind_columns.csv')
 while True:
     try:
-        print('Choose any combination of weather attributes:')
+        print('Choose any combination of weather attributes to display:')
         weather_properties_user = []
         for k,v in weather_properties_user_inputs.items():
             print(k,v)
@@ -332,70 +340,79 @@ while True:
         #     big_df[e] = ss.savgol_filter(big_df[e],9,1)
 
         #plot = big_df.plot(y=attribute_list_translated, grid='true', kind='line', title=locale)
-        fig , ax = plt.subplots()
+        fig , ax_list = plt.subplots(3)
 
         # Placeholders for customizing matplotlib formatting for each weather attribute
         if 'temperature' in attribute_list_translated:
-            ax.plot(big_df['temperature'])
+            ax_list[0].plot(big_df['temperature'],label='Temperature (F)')
             pass
         if 'dewpoint' in attribute_list_translated:
-            ax.plot(big_df['dewpoint'])
+            ax_list[0].plot(big_df['dewpoint'],label='Dewpoint')
             pass
         if 'maxTemperature' in attribute_list_translated:
-            ax.plot(big_df['maxTemperature'])
+            ax_list[0].plot(big_df['maxTemperature'],label='Hi Temp')
             pass
         if 'minTemperature' in attribute_list_translated:
-            ax.plot(big_df['minTemperature'])
+            ax_list[0].plot(big_df['minTemperature'], label='Low Temp')
             pass
         if 'relativeHumidity' in attribute_list_translated:
-            ax.plot(big_df['relativeHumidity'])
-            pass
-        if 'apparentTemperature' in attribute_list_translated:
-            ax.plot(big_df['apparentTemperature'])
-            pass
-        if 'heatIndex' in attribute_list_translated:
-            ax.plot(big_df['heatIndex'])
+            ax_list[1].plot(big_df['relativeHumidity'], label='Relative Humidity (%)')
             pass
         if 'windChill' in attribute_list_translated:
-            ax.plot(big_df['windChill'])
+            ax_list[0].plot(big_df['windChill'], label='Windchill')
             pass
         if 'skyCover' in attribute_list_translated:
-            ax.plot(big_df['skyCover'])
+            ax_list[1].plot(big_df['skyCover'], label='Sky Cover (%)',c='grey')
+            ax_list[1].fill_between(big_df.index,big_df['skyCover'].values,y2=0,color='grey',alpha=0.3,hatch='-')
             pass
         if 'windDirection' and 'windSpeed' in attribute_list_translated:
             # plot scatter w/ rotated markers on top of line, pyplot plot function not supporting transformed
             # MarkerStyle, Tries to interpret as 'Path'. Also, setting marker angle is counterclockwise...
+            ax_list[1].plot(big_df['windSpeed'],c='blue',linewidth=.5,zorder=0, label='Wind Speed')
             for e in big_df.index:
-                t = mpl.markers.MarkerStyle(marker=r'$\uparrow$')
+                t = mpl.markers.MarkerStyle(marker='$\u2038$')
+                #print(mpl.dates.date2num(e))
                 t._transform.rotate_deg(360 - int(round(big_df['windDirection'][e])))
-                plt.scatter(e,big_df['windSpeed'][e],marker=t,s=200,c='blue')
-            plt.plot(big_df['windSpeed'])
-            plt.xlim(dt.now() - timedelta(days=3) , dt.now() + timedelta(days=3))
-            pass
-        if 'windSpeed' in attribute_list_translated:
-            ax.plot(big_df['windSpeed'])
+                # t._transform.rotate_deg_around(x=mpl.dates.date2num(e),y=big_df['windSpeed'][e],degrees=360 - int(round(big_df['windDirection'][e])))
+                ax_list[1].scatter(e,big_df['windSpeed'][e],marker=t,s=50,c='lightseagreen',zorder=10)
+
+            # plt.xlim(dt.now() - timedelta(days=3) , dt.now() + timedelta(days=3))
             pass
         if 'probabilityOfPrecipitation' in attribute_list_translated:
-            ax.plot(big_df['probabilityOfPrecipitation'])
+            ax_list[1].plot(big_df['probabilityOfPrecipitation'],label='Chance of Rain',c='#2c80ffff')
+            ax_list[1].fill_between(big_df.index,big_df['probabilityOfPrecipitation'].values,y2=0,color='#2c80ffff',alpha=0.3,hatch='|')
             pass
         if 'quantitativePrecipitation' in attribute_list_translated:
-            ax.plot(big_df['quantitativePrecipitation'])
+            ax_list[2].plot(big_df['quantitativePrecipitation'],label='Rainfall (in)',c='#2c80ffff')
+            ax_list[2].fill_between(big_df.index, big_df['quantitativePrecipitation'].values, y2=0, color='#2c80ffff', alpha=0.3)
             pass
         if 'pressure' in attribute_list_translated:
-            ax.plot(big_df['pressure'])
+            ax_list[1].plot(big_df['pressure'], label='Pressure (in)')
             pass
+        for ax in ax_list:
 
-        plt.tick_params(axis='x', which='minor', labelsize=8)
-        plt.tick_params(axis='x', which='major', pad=16, labelrotation=0)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
-        ax.xaxis.set_minor_locator(mdates.HourLocator(interval=6))
-        ax.xaxis.set_minor_formatter(mdates.DateFormatter("%I%p"))
-        ax.grid()
-        ax.legend(attributes_legend)
-        ax.set_title(locale)
-        plt.setp(ax.xaxis.get_majorticklabels(), ha="center")
-        plt.axvline(x=dt.now(), color='black')      #shows current time on graph
+            ax.tick_params(axis='x', which='minor', labelsize=8)
+            ax.tick_params(axis='x', which='major', pad=16, labelrotation=0)
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+            ax.xaxis.set_minor_locator(mdates.HourLocator(interval=6))
+            ax.xaxis.set_minor_formatter(mdates.DateFormatter("%I%p"))
+            ax.grid()
+            for line in ax.lines:
+                y = line.get_ydata()[-1]
+                line_str = str(line)
+                line_label = line_str[line_str.index('(') + 1:-1]
+                ax.annotate(line_label, xy=(1, y), xytext=(6, 0), color=line.get_color(),
+                            xycoords=ax.get_yaxis_transform(), textcoords="offset points",
+                            size=14, va="center")
+            ax.set_xlim(big_df.index[0], big_df.index[-1])
+            labels = ax.get_xticklabels()
+            # for e in labels:
+            #     e.set_rotation()
+            # ax.setp(ax.xaxis.get_majorticklabels(), ha="center")
+            ax.axvline(x=dt.now(), color='black')      #shows current time on graph
+        fig.suptitle(locale)
         plt.show()
+        continue
     except Exception as ex:
         print('ERROR. TRY AGAIN')
         raise ex
