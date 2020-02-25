@@ -431,8 +431,7 @@ class Noaa:
                             t._transform.rotate_deg(270 - int(round(big_df['windDirection'][e])))
                             # t._transform.rotate_deg_around(x=mpl.dates.date2num(e),y=big_df['windSpeed'][e],degrees=360 - int(round(big_df['windDirection'][e])))
                             ax_list[2].scatter(e, big_df['windSpeed'][e], marker=t, s=150, c='lightseagreen', zorder=10)
-                        else:
-                            print('you have a problem here: ' + str(e))
+                    ax_list[2].plot(big_df['windSpeed'], alpha=0.0, label='Wind Conditions', c='lightseagreen')
                 if 'probabilityOfPrecipitation' in attribute_list_translated:
                     attr = 'probabilityOfPrecipitation'
                     big_df[attr].fillna(0, inplace=True)
